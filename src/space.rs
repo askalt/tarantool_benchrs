@@ -3,7 +3,7 @@ use std::ptr::null_mut;
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
 use serde_bytes::Bytes;
-use tarantool::tuple::{Encode, ToTupleBuffer};
+use tarantool::tuple::{Encode, TupleBuffer};
 
 mod ffi {
     use super::BoxTuple;
@@ -96,17 +96,8 @@ impl BinSpace {
         self.space.put(&entry).unwrap();
     }
 
-    pub fn splice_bindata(&self, id: usize, offset: usize, new_bytes: &Bytes) {
-        // Update data:
-        // operation
-        // 0-indexed field num
-        // offset
-        // remove bytes length
-        // new bytes
-        let op = (":", 1, offset, new_bytes.len(), new_bytes)
-            .to_tuple_buffer()
-            .unwrap();
-        self.space.update(&(id,), &[op]).unwrap();
+    pub fn update(&self, id: usize, ops: &[TupleBuffer]) {
+        self.space.update(&(id,), ops).unwrap();
     }
 
     pub fn get(&self, id: usize) -> Option<Entry> {

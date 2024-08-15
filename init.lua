@@ -42,6 +42,7 @@ ffi.cdef [[
 -- 0 - copy
 -- 1 - splices
 local method = 1
+local verbose = false
 local block_size = 10000
 local block_num = 100
 local transaction_per_block = false
@@ -51,7 +52,7 @@ while update_entries < block_size do
     box.space.bindata:truncate()
     local config = {
         retries = 15,
-        verbose = false,
+        verbose = verbose,
         method = method,
         block_size = block_size,
         block_num = block_num,

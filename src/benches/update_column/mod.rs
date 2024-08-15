@@ -2,6 +2,7 @@ use std::convert::Infallible;
 
 use rand::Rng;
 use serde_bytes::Bytes;
+use tarantool::tuple::ToTupleBuffer;
 
 use crate::space::{BinSpace, Entry};
 
@@ -128,27 +129,41 @@ pub fn run_copy(state: &mut State) {
 }
 
 pub fn run_splices(state: &mut State) {
+    const MAX_UPDATES: usize = 4000;
     // O(log ColumnNum) tree index seek + O(1) pointer conversion.
     let was = state.space.get(state.id).unwrap();
 
     let mut splices = vec![];
 
-    // Make splices array.
+    // Make updates (splices) array.
     for (i, to_update) in state.data.update_mask.iter().enumerate() {
         if !*to_update {
             continue;
         }
         let (res, _) = was.data[i].overflowing_add(state.data.updates[i]);
         let offset = i * std::mem::size_of::<u8>();
-        splices.push((offset, res));
+        let new_bytes = [res];
+
+        let new_bytes = Bytes::new(&new_bytes);
+        splices.push(
+            // Update data:
+            // operation
+            // 0-indexed field num
+            // offset
+            // remove bytes length
+            // new bytes
+            (":", 1, offset, new_bytes.len(), new_bytes)
+                .to_tuple_buffer()
+                .unwrap(),
+        );
     }
 
     // TODO: complexity.
-    let apply_splices = || -> Result<(), Infallible> {
-        for (offset, val) in splices {
-            state
-                .space
-                .splice_bindata(state.id, offset, Bytes::new(&[val]))
+    let mut apply_splices = || -> Result<(), Infallible> {
+        // Reverse order to not break offset numeration.
+        splices.reverse();
+        for chunk in splices.chunks(MAX_UPDATES) {
+            state.space.update(state.id, chunk);
         }
         Ok(())
     };
